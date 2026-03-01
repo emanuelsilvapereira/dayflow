@@ -14,11 +14,9 @@ export default function DayFlow() {
 
   // === EFEITOS (Memória do Navegador) ===
   useEffect(() => {
-    // Verifica primeira visita
     const hasVisited = localStorage.getItem('dayflow_visited');
     if (!hasVisited) setShowOnboarding(true);
 
-    // Controlo de limite diário
     const today = new Date().toDateString();
     const storedDate = localStorage.getItem('dayflow_date');
     if (storedDate !== today) {
@@ -28,7 +26,6 @@ export default function DayFlow() {
       setGenerationsToday(parseInt(localStorage.getItem('dayflow_count') || '0'));
     }
 
-    // NOVA FUNCIONALIDADE: Recupera o plano se a pessoa recarregar a página!
     const savedPlan = localStorage.getItem('dayflow_current_plan');
     const savedProgress = localStorage.getItem('dayflow_progress');
     if (savedPlan) setPlan(JSON.parse(savedPlan));
@@ -60,7 +57,6 @@ export default function DayFlow() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.erro || "Erro ao processar as tarefas.");
 
-      // Atualiza o estado e guarda na memória local para não perder ao recarregar
       setPlan(data);
       setCompletedTasks([]);
       localStorage.setItem('dayflow_current_plan', JSON.stringify(data));
@@ -78,7 +74,6 @@ export default function DayFlow() {
     }
   };
 
-  // NOVA FUNCIONALIDADE: Guarda o progresso sempre que clica numa tarefa
   const toggleTaskCompletion = (taskId: string) => {
     const updatedTasks = completedTasks.includes(taskId)
       ? completedTasks.filter(id => id !== taskId)
@@ -95,17 +90,49 @@ export default function DayFlow() {
     localStorage.removeItem('dayflow_progress');
   };
 
-  // Cálculos para a Barra de Progresso
+  // NOVA FUNCIONALIDADE: Partilhar no WhatsApp (Versão à Prova de Balas)
+  const shareToWhatsApp = () => {
+    if (!plan) return;
+
+    // Geramos os emojis através de código para evitar bugs de leitura do Git/Windows
+    const emjCal = String.fromCodePoint(0x1F5D3, 0xFE0F);
+    const emjRoc = String.fromCodePoint(0x1F680);
+    const emjMorn = String.fromCodePoint(0x1F304);
+    const emjAft = String.fromCodePoint(0x2600, 0xFE0F);
+    const emjNig = String.fromCodePoint(0x1F319);
+    const emjChk = String.fromCodePoint(0x2705);
+    const emjBox = String.fromCodePoint(0x2B1C);
+
+    let text = `${emjCal} *O meu Plano de Hoje no DayFlow* ${emjRoc}\n\n`;
+
+    const formatPeriod = (periodName: string, icon: string, tasks: any[]) => {
+      if (!tasks || tasks.length === 0) return '';
+      let periodText = `${icon} *${periodName}*\n`;
+      tasks.forEach(task => {
+        const isDone = completedTasks.includes(task.id) ? emjChk : emjBox;
+        periodText += `${isDone} ${task.tarefa} (${task.duracao})\n`;
+      });
+      return periodText + '\n';
+    };
+
+    text += formatPeriod('Manhã', emjMorn, plan.manha);
+    text += formatPeriod('Tarde', emjAft, plan.tarde);
+    text += formatPeriod('Noite', emjNig, plan.noite);
+
+    text += `\nCria o teu plano também em: https://dayflow-b93axbgw4-emanuelsilvapereiras-projects.vercel.app`;
+
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+  };
+
   const totalTasks = plan ? (plan.manha?.length || 0) + (plan.tarde?.length || 0) + (plan.noite?.length || 0) : 0;
   const isAllCompleted = totalTasks > 0 && completedTasks.length === totalTasks;
   const progressPercentage = totalTasks > 0 ? Math.round((completedTasks.length / totalTasks) * 100) : 0;
 
   // === RENDERIZAÇÃO DA INTERFACE ===
-  // Usamos bg-slate-50 para um fundo muito limpo e letras em slate-800 para contraste suave
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-teal-200 p-6 md:p-12 transition-colors duration-500">
       
-      {/* MODAL DE ONBOARDING */}
       {showOnboarding && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity">
           <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center transform scale-100">
@@ -122,7 +149,6 @@ export default function DayFlow() {
       )}
 
       <div className="max-w-2xl mx-auto">
-        {/* HERO MESSAGE */}
         <header className="mb-10 text-center mt-8">
           <h1 className="text-xl md:text-2xl font-medium text-slate-400 tracking-tight">
             "Você não precisa fazer tudo. <br/>
@@ -131,7 +157,6 @@ export default function DayFlow() {
         </header>
 
         {!plan ? (
-          /* TELA DE INPUT (Antes de gerar o plano) */
           <div className="space-y-6 bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 transition-all">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -181,10 +206,8 @@ export default function DayFlow() {
             </p>
           </div>
         ) : (
-          /* TELA DO PLANO GERADO */
           <div className="space-y-6 animate-in fade-in duration-700">
             
-            {/* NOVO: Barra de Progresso Visual */}
             <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
               <div className="flex justify-between items-end mb-3">
                 <span className="font-bold text-slate-800 text-lg">O seu Progresso</span>
@@ -198,9 +221,8 @@ export default function DayFlow() {
               </div>
             </div>
 
-            {/* Listagem das Tarefas */}
             {['manha', 'tarde', 'noite'].map((periodo) => {
-              if (!plan[periodo] || plan[periodo].length === 0) return null; // Esconde o bloco se não tiver tarefas
+              if (!plan[periodo] || plan[periodo].length === 0) return null;
 
               return (
                 <div key={periodo} className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
@@ -253,12 +275,23 @@ export default function DayFlow() {
               </div>
             )}
 
-            <button 
-              onClick={resetApp}
-              className="w-full bg-transparent border-2 border-slate-200 text-slate-600 py-4 rounded-2xl font-bold hover:border-slate-900 hover:text-slate-900 transition-all"
-            >
-              Começar um novo dia
-            </button>
+            <div className="flex flex-col gap-3 mt-8">
+              <button 
+                onClick={shareToWhatsApp}
+                className="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold hover:bg-[#20bd5a] transition-all shadow-lg flex justify-center items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                Partilhar no WhatsApp
+              </button>
+
+              <button 
+                onClick={resetApp}
+                className="w-full bg-transparent border-2 border-slate-200 text-slate-600 py-4 rounded-2xl font-bold hover:border-slate-900 hover:text-slate-900 transition-all"
+              >
+                Começar um novo dia
+              </button>
+            </div>
+
           </div>
         )}
       </div>
