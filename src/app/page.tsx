@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { supabase } from '../lib/supabase';
 import { useState, useEffect } from 'react';
 
 export default function DayFlow() {
@@ -11,8 +13,13 @@ export default function DayFlow() {
   const [isLoading, setIsLoading] = useState(false);
   const [generationsToday, setGenerationsToday] = useState(0);
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
+  const [user, setUser] = useState<any>(null);
 
-  // === EFEITOS (Memória do Navegador) ===
+  // NOVO: Estados para controlar a edição de tarefas
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskText, setEditingTaskText] = useState('');
+
+  // === EFEITOS ===
   useEffect(() => {
     const hasVisited = localStorage.getItem('dayflow_visited');
     if (!hasVisited) setShowOnboarding(true);
@@ -30,12 +37,27 @@ export default function DayFlow() {
     const savedProgress = localStorage.getItem('dayflow_progress');
     if (savedPlan) setPlan(JSON.parse(savedPlan));
     if (savedProgress) setCompletedTasks(JSON.parse(savedProgress));
+
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) setUser(session.user);
+    };
+    checkUser();
   }, []);
 
   // === FUNÇÕES ===
   const closeOnboarding = () => {
     localStorage.setItem('dayflow_visited', 'true');
     setShowOnboarding(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    localStorage.removeItem('dayflow_current_plan');
+    localStorage.removeItem('dayflow_progress');
+    localStorage.removeItem('dayflow_count');
+    window.location.href = '/login';
   };
 
   const handleGeneratePlan = async () => {
@@ -66,6 +88,14 @@ export default function DayFlow() {
       setGenerationsToday(newCount);
       localStorage.setItem('dayflow_count', newCount.toString());
 
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData.user;
+
+      if (currentUser) {
+        await supabase.from('planos').insert([
+          { user_id: currentUser.id, energia: mood, dados_do_plano: data }
+        ]);
+      }
     } catch (error) {
       console.error("Erro:", error);
       alert("Ops! Houve um problema ao falar com a IA. Tente novamente.");
@@ -83,6 +113,28 @@ export default function DayFlow() {
     localStorage.setItem('dayflow_progress', JSON.stringify(updatedTasks));
   };
 
+  // NOVO: Funções de Edição
+  const startEditing = (taskId: string, currentText: string) => {
+    setEditingTaskId(taskId);
+    setEditingTaskText(currentText);
+  };
+
+  const saveEdit = (periodo: string, taskId: string) => {
+    if (!plan || !editingTaskText.trim()) return;
+    
+    // Cria uma cópia do plano atual
+    const updatedPlan = { ...plan };
+    // Encontra a tarefa exata e atualiza o texto
+    const taskIndex = updatedPlan[periodo].findIndex((t: any) => t.id === taskId);
+    if (taskIndex > -1) {
+      updatedPlan[periodo][taskIndex].tarefa = editingTaskText;
+      setPlan(updatedPlan);
+      localStorage.setItem('dayflow_current_plan', JSON.stringify(updatedPlan));
+    }
+    // Sai do modo de edição
+    setEditingTaskId(null);
+  };
+
   const resetApp = () => {
     setPlan(null);
     setTasksInput('');
@@ -90,11 +142,9 @@ export default function DayFlow() {
     localStorage.removeItem('dayflow_progress');
   };
 
-  // NOVA FUNCIONALIDADE: Partilhar no WhatsApp (Versão à Prova de Balas)
   const shareToWhatsApp = () => {
     if (!plan) return;
 
-    // Geramos os emojis através de código para evitar bugs de leitura do Git/Windows
     const emjCal = String.fromCodePoint(0x1F5D3, 0xFE0F);
     const emjRoc = String.fromCodePoint(0x1F680);
     const emjMorn = String.fromCodePoint(0x1F304);
@@ -133,6 +183,46 @@ export default function DayFlow() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-teal-200 p-6 md:p-12 transition-colors duration-500">
       
+      {/* BARRA SUPERIOR DE PERFIL / LOGIN */}
+      {user ? (
+        <div className="max-w-2xl mx-auto flex justify-between items-center bg-white p-4 rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] mb-8 border border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center font-bold text-sm">
+              {user.email?.charAt(0).toUpperCase()}
+            </div>
+            <div className="text-sm font-medium text-slate-600 hidden sm:block">
+              {user.email}
+            </div>
+          </div>
+          
+          <div className="flex gap-2 items-center">
+            {/* NOVO BOTÃO DE HISTÓRICO AQUI */}
+            <Link 
+              href="/historico"
+              className="text-sm font-bold text-teal-600 hover:text-teal-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-teal-50"
+            >
+              Meu Histórico
+            </Link>
+
+            <button 
+              onClick={handleLogout}
+              className="text-sm font-bold text-slate-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
+            >
+              Sair
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-2xl mx-auto flex justify-end items-center mb-8">
+          <a 
+            href="/login"
+            className="text-sm font-bold text-slate-600 bg-white border border-slate-200 px-4 py-2 rounded-xl hover:border-slate-400 hover:text-slate-900 transition-all shadow-sm flex items-center gap-2"
+          >
+            Entrar / Criar Conta
+          </a>
+        </div>
+      )}
+
       {showOnboarding && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity">
           <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center transform scale-100">
@@ -149,7 +239,7 @@ export default function DayFlow() {
       )}
 
       <div className="max-w-2xl mx-auto">
-        <header className="mb-10 text-center mt-8">
+        <header className="mb-10 text-center mt-2">
           <h1 className="text-xl md:text-2xl font-medium text-slate-400 tracking-tight">
             "Você não precisa fazer tudo. <br/>
             <span className="text-slate-900 font-semibold">Apenas a próxima coisa certa.</span>"
@@ -232,10 +322,11 @@ export default function DayFlow() {
                   <div className="space-y-2">
                     {plan[periodo].map((task: any) => {
                       const isDone = completedTasks.includes(task.id);
+                      
                       return (
-                        <label 
+                        <div 
                           key={task.id} 
-                          className={`flex items-start gap-4 p-4 rounded-2xl cursor-pointer transition-all duration-300 border border-transparent hover:bg-slate-50 ${isDone ? 'opacity-60 bg-slate-50' : ''}`}
+                          className={`flex items-start gap-4 p-4 rounded-2xl transition-all duration-300 border border-transparent hover:bg-slate-50 ${isDone ? 'opacity-60 bg-slate-50' : ''}`}
                         >
                           <div className="relative flex items-center mt-1">
                             <input 
@@ -245,10 +336,47 @@ export default function DayFlow() {
                               className="w-6 h-6 border-2 border-slate-300 rounded-lg text-teal-500 focus:ring-teal-500 focus:ring-offset-0 transition-all cursor-pointer accent-teal-500"
                             />
                           </div>
-                          <div className="flex-1">
-                            <p className={`text-slate-800 font-medium transition-all duration-300 ${isDone ? 'line-through text-slate-400' : ''}`}>
-                              {task.tarefa}
-                            </p>
+                          
+                          <div className="flex-1 w-full">
+                            {/* LÓGICA DE EDIÇÃO AQUI */}
+                            {editingTaskId === task.id ? (
+                              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                                <input 
+                                  type="text"
+                                  value={editingTaskText}
+                                  onChange={(e) => setEditingTaskText(e.target.value)}
+                                  className="flex-1 p-2 text-sm border-2 border-teal-500 rounded-lg focus:outline-none text-slate-700 bg-white"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveEdit(periodo, task.id);
+                                    if (e.key === 'Escape') setEditingTaskId(null);
+                                  }}
+                                />
+                                <button 
+                                  onClick={() => saveEdit(periodo, task.id)}
+                                  className="px-4 py-2 bg-teal-500 text-white text-sm rounded-lg font-bold hover:bg-teal-600 transition-colors"
+                                >
+                                  Salvar
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-start group">
+                                <p 
+                                  onClick={() => toggleTaskCompletion(task.id)}
+                                  className={`text-slate-800 font-medium transition-all duration-300 cursor-pointer ${isDone ? 'line-through text-slate-400' : ''}`}
+                                >
+                                  {task.tarefa}
+                                </p>
+                                <button 
+                                  onClick={() => startEditing(task.id, task.tarefa)}
+                                  className="text-slate-400 hover:text-teal-600 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1 text-sm ml-2"
+                                  title="Editar Tarefa"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                            )}
+
                             <div className="flex gap-3 mt-1.5 text-xs font-medium">
                               <span className="text-slate-500 flex items-center gap-1">⏱ {task.duracao}</span>
                               <span className={`px-2 py-0.5 rounded-md ${
@@ -260,7 +388,7 @@ export default function DayFlow() {
                               </span>
                             </div>
                           </div>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>
