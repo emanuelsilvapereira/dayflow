@@ -1,25 +1,36 @@
 'use client';
 
-import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 export default function DayFlow() {
   // === ESTADOS DA APLICAÇÃO ===
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [tasksInput, setTasksInput] = useState('');
   const [mood, setMood] = useState('Normal');
-  const [plan, setPlan] = useState<any>(null); 
+  const [plan, setPlan] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [generationsToday, setGenerationsToday] = useState(0);
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [user, setUser] = useState<any>(null);
-
-  // NOVO: Estados para controlar a edição de tarefas
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskText, setEditingTaskText] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  // Controle do Dark Mode
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   // === EFEITOS ===
+  useEffect(() => {
+    setMounted(true);
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
   useEffect(() => {
     const hasVisited = localStorage.getItem('dayflow_visited');
     if (!hasVisited) setShowOnboarding(true);
@@ -45,6 +56,8 @@ export default function DayFlow() {
     checkUser();
   }, []);
 
+  if (!mounted) return null;
+
   // === FUNÇÕES ===
   const closeOnboarding = () => {
     localStorage.setItem('dayflow_visited', 'true');
@@ -63,7 +76,7 @@ export default function DayFlow() {
   const handleGeneratePlan = async () => {
     if (!tasksInput.trim()) return;
     if (generationsToday >= 3) {
-      alert("Atingiu o limite gratuito de hoje. (Futuramente: Tela de Pagamento!)");
+      alert("Atingiu o limite gratuito de hoje.");
       return;
     }
 
@@ -83,7 +96,7 @@ export default function DayFlow() {
       setCompletedTasks([]);
       localStorage.setItem('dayflow_current_plan', JSON.stringify(data));
       localStorage.setItem('dayflow_progress', JSON.stringify([]));
-      
+
       const newCount = generationsToday + 1;
       setGenerationsToday(newCount);
       localStorage.setItem('dayflow_count', newCount.toString());
@@ -98,7 +111,7 @@ export default function DayFlow() {
       }
     } catch (error) {
       console.error("Erro:", error);
-      alert("Ops! Houve um problema ao falar com a IA. Tente novamente.");
+      alert("Houve um problema ao falar com a IA.");
     } finally {
       setIsLoading(false);
     }
@@ -108,12 +121,11 @@ export default function DayFlow() {
     const updatedTasks = completedTasks.includes(taskId)
       ? completedTasks.filter(id => id !== taskId)
       : [...completedTasks, taskId];
-    
+
     setCompletedTasks(updatedTasks);
     localStorage.setItem('dayflow_progress', JSON.stringify(updatedTasks));
   };
 
-  // NOVO: Funções de Edição
   const startEditing = (taskId: string, currentText: string) => {
     setEditingTaskId(taskId);
     setEditingTaskText(currentText);
@@ -121,17 +133,14 @@ export default function DayFlow() {
 
   const saveEdit = (periodo: string, taskId: string) => {
     if (!plan || !editingTaskText.trim()) return;
-    
-    // Cria uma cópia do plano atual
+
     const updatedPlan = { ...plan };
-    // Encontra a tarefa exata e atualiza o texto
     const taskIndex = updatedPlan[periodo].findIndex((t: any) => t.id === taskId);
     if (taskIndex > -1) {
       updatedPlan[periodo][taskIndex].tarefa = editingTaskText;
       setPlan(updatedPlan);
       localStorage.setItem('dayflow_current_plan', JSON.stringify(updatedPlan));
     }
-    // Sai do modo de edição
     setEditingTaskId(null);
   };
 
@@ -144,248 +153,162 @@ export default function DayFlow() {
 
   const shareToWhatsApp = () => {
     if (!plan) return;
-
-    const emjCal = String.fromCodePoint(0x1F5D3, 0xFE0F);
-    const emjRoc = String.fromCodePoint(0x1F680);
-    const emjMorn = String.fromCodePoint(0x1F304);
-    const emjAft = String.fromCodePoint(0x2600, 0xFE0F);
-    const emjNig = String.fromCodePoint(0x1F319);
-    const emjChk = String.fromCodePoint(0x2705);
-    const emjBox = String.fromCodePoint(0x2B1C);
-
-    let text = `${emjCal} *O meu Plano de Hoje no DayFlow* ${emjRoc}\n\n`;
-
-    const formatPeriod = (periodName: string, icon: string, tasks: any[]) => {
+    let text = `*O meu Plano de Hoje no DayFlow*\n\n`;
+    const formatPeriod = (name: string, tasks: any[]) => {
       if (!tasks || tasks.length === 0) return '';
-      let periodText = `${icon} *${periodName}*\n`;
+      let pt = `*${name}*\n`;
       tasks.forEach(task => {
-        const isDone = completedTasks.includes(task.id) ? emjChk : emjBox;
-        periodText += `${isDone} ${task.tarefa} (${task.duracao})\n`;
+        const isDone = completedTasks.includes(task.id) ? '✅' : '⬜';
+        pt += `${isDone} ${task.tarefa} (${task.duracao})\n`;
       });
-      return periodText + '\n';
+      return pt + '\n';
     };
-
-    text += formatPeriod('Manhã', emjMorn, plan.manha);
-    text += formatPeriod('Tarde', emjAft, plan.tarde);
-    text += formatPeriod('Noite', emjNig, plan.noite);
-
-    text += `\nCria o teu plano também em: https://dayflow-b93axbgw4-emanuelsilvapereiras-projects.vercel.app`;
-
-    const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    text += formatPeriod('Manhã', plan.manha);
+    text += formatPeriod('Tarde', plan.tarde);
+    text += formatPeriod('Noite', plan.noite);
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const totalTasks = plan ? (plan.manha?.length || 0) + (plan.tarde?.length || 0) + (plan.noite?.length || 0) : 0;
   const isAllCompleted = totalTasks > 0 && completedTasks.length === totalTasks;
   const progressPercentage = totalTasks > 0 ? Math.round((completedTasks.length / totalTasks) * 100) : 0;
 
-  // === RENDERIZAÇÃO DA INTERFACE ===
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-teal-200 p-6 md:p-12 transition-colors duration-500">
-      
-      {/* BARRA SUPERIOR DE PERFIL / LOGIN */}
-      {user ? (
-        <div className="max-w-2xl mx-auto flex justify-between items-center bg-white p-4 rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] mb-8 border border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center font-bold text-sm">
-              {user.email?.charAt(0).toUpperCase()}
-            </div>
-            <div className="text-sm font-medium text-slate-600 hidden sm:block">
-              {user.email}
-            </div>
-          </div>
-          
-          <div className="flex gap-2 items-center">
-            {/* NOVO BOTÃO DE HISTÓRICO AQUI */}
-            <Link 
-              href="/historico"
-              className="text-sm font-bold text-teal-600 hover:text-teal-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-teal-50"
-            >
-              Meu Histórico
-            </Link>
+    <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans p-6 md:p-12 transition-colors duration-500">
 
-            <button 
-              onClick={handleLogout}
-              className="text-sm font-bold text-slate-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
-            >
-              Sair
-            </button>
+      {/* CABEÇALHO */}
+      <div className="max-w-2xl mx-auto mb-16">
+        <div className="flex justify-between items-center py-6 border-b border-zinc-200 dark:border-zinc-800/60">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 dark:bg-white animate-pulse"></div>
+            <span className="font-bold tracking-tighter text-zinc-900 dark:text-white text-xl">DayFlow</span>
           </div>
-        </div>
-      ) : (
-        <div className="max-w-2xl mx-auto flex justify-end items-center mb-8">
-          <a 
-            href="/login"
-            className="text-sm font-bold text-slate-600 bg-white border border-slate-200 px-4 py-2 rounded-xl hover:border-slate-400 hover:text-slate-900 transition-all shadow-sm flex items-center gap-2"
-          >
-            Entrar / Criar Conta
-          </a>
-        </div>
-      )}
 
-      {showOnboarding && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center transform scale-100">
-            <h2 className="text-2xl font-bold mb-4 text-slate-900">Bem-vindo ao DayFlow</h2>
-            <p className="text-slate-500 text-sm mb-6">Organize a sua mente numa interface livre de distrações.</p>
-            <button 
-              onClick={closeOnboarding}
-              className="w-full bg-teal-600 text-white py-3 rounded-xl font-medium hover:bg-teal-700 transition-all shadow-md hover:shadow-lg"
+          <div className="flex items-center gap-3 sm:gap-6">
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm"
             >
-              Começar agora
+              {isDarkMode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+              )}
             </button>
+
+            {user ? (
+              <div className="flex items-center gap-4">
+                <Link href="/historico" className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+                  Histórico
+                </Link>
+                <button onClick={handleLogout} className="w-8 h-8 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-full flex items-center justify-center text-xs font-bold">
+                  {user.email?.charAt(0).toUpperCase()}
+                </button>
+              </div>
+            ) : (
+              <Link href="/login" className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-900 dark:text-white border-b border-zinc-900 dark:border-white">
+                Entrar
+              </Link>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <div className="max-w-2xl mx-auto">
-        <header className="mb-10 text-center mt-2">
-          <h1 className="text-xl md:text-2xl font-medium text-slate-400 tracking-tight">
-            "Você não precisa fazer tudo. <br/>
-            <span className="text-slate-900 font-semibold">Apenas a próxima coisa certa.</span>"
+        <header className="mb-12 text-center animate-in fade-in slide-in-from-top-4 duration-1000">
+          <h1 className="text-2xl md:text-3xl font-normal text-zinc-400 dark:text-zinc-500 tracking-tight leading-relaxed">
+            Não precisas de fazer tudo. <br />
+            <span className="text-zinc-900 dark:text-zinc-200 font-medium">Apenas a próxima coisa certa.</span>
           </h1>
         </header>
 
         {!plan ? (
-          <div className="space-y-6 bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 transition-all">
+          /* CARD DE ENTRADA GLASSMORPHISM */
+          <div className="space-y-8 animate-in fade-in duration-1000 max-w-lg mx-auto glass-card p-10 rounded-[32px]">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Como está a sua energia hoje?
-              </label>
-              <select 
+              <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Energia</label>
+              <select
                 value={mood}
                 onChange={(e) => setMood(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all cursor-pointer text-slate-700 font-medium"
+                className="w-full p-4 bg-white/50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-400 outline-none transition-all text-zinc-800 dark:text-zinc-200 appearance-none"
               >
                 <option value="Normal">Normal — Dia padrão</option>
                 <option value="Tired">Cansado — Preciso de pausas</option>
                 <option value="Focused">Focado — Pronto para a guerra</option>
-                <option value="Overwhelmed">Sobrecarragado — Um passo de cada vez</option>
+                <option value="Overwhelmed">Sobrecarregado — Um passo de cada vez</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Despeje a sua mente
-              </label>
-              <textarea 
+              <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Tarefas (despejo mental)</label>
+              <textarea
                 value={tasksInput}
                 onChange={(e) => setTasksInput(e.target.value)}
-                placeholder="Ex: academia, responder cliente, editar vídeo..."
-                className="w-full p-4 h-40 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all resize-none text-slate-700"
+                placeholder="O que está na tua cabeça?"
+                className="w-full p-4 h-40 bg-white/50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:ring-1 focus:ring-zinc-400 outline-none transition-all resize-none text-zinc-800 dark:text-zinc-200"
               />
             </div>
 
-            <button 
+            <button
               onClick={handleGeneratePlan}
               disabled={isLoading || !tasksInput.trim()}
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-semibold hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+              className="w-full bg-zinc-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold hover:opacity-90 transition-all disabled:opacity-30"
             >
-              {isLoading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <circle cx="12" cy="12" r="10" strokeWidth="4" stroke="currentColor" strokeDasharray="32" strokeDashoffset="32" />
-                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-                  </svg>
-                  Organizando...
-                </span>
-              ) : 'Organizar o meu dia'}
+              {isLoading ? 'A processar...' : 'Organizar o meu dia'}
             </button>
-            <p className="text-center text-xs text-slate-400 font-medium">
-              Planos gratuitos restantes hoje: {3 - generationsToday} de 3
-            </p>
           </div>
         ) : (
-          <div className="space-y-6 animate-in fade-in duration-700">
+          /* LISTA DE TAREFAS GERADA */
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-1000 max-w-lg mx-auto">
             
-            <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
-              <div className="flex justify-between items-end mb-3">
-                <span className="font-bold text-slate-800 text-lg">O seu Progresso</span>
-                <span className="text-sm text-teal-600 font-bold">{progressPercentage}%</span>
+            {/* PROGRESSO */}
+            <div className="mb-10 px-2">
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Progresso</span>
+                <span className="text-sm text-zinc-900 dark:text-zinc-200 font-bold">{progressPercentage}%</span>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                <div 
-                  className="bg-teal-500 h-3 rounded-full transition-all duration-1000 ease-out"
+              <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-zinc-900 dark:bg-white h-1.5 rounded-full transition-all duration-1000 ease-out"
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
             </div>
 
-            {['manha', 'tarde', 'noite'].map((periodo) => {
-              if (!plan[periodo] || plan[periodo].length === 0) return null;
-
-              return (
-                <div key={periodo} className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
-                  <h3 className="text-lg font-bold text-slate-900 capitalize mb-4 flex items-center gap-2">
-                    {periodo === 'manha' ? '🌅 Manhã' : periodo === 'tarde' ? '☀️ Tarde' : '🌙 Noite'}
+            {['manha', 'tarde', 'noite'].map((periodo) => (
+              plan[periodo] && plan[periodo].length > 0 && (
+                <div key={periodo} className="space-y-3">
+                  <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.3em] pl-2">
+                    {periodo === 'manha' ? 'Manhã' : periodo === 'tarde' ? 'Tarde' : 'Noite'}
                   </h3>
-                  <div className="space-y-2">
+                  <div className="grid gap-3">
                     {plan[periodo].map((task: any) => {
                       const isDone = completedTasks.includes(task.id);
-                      
                       return (
-                        <div 
-                          key={task.id} 
-                          className={`flex items-start gap-4 p-4 rounded-2xl transition-all duration-300 border border-transparent hover:bg-slate-50 ${isDone ? 'opacity-60 bg-slate-50' : ''}`}
+                        <div
+                          key={task.id}
+                          className={`group flex items-start gap-4 p-5 rounded-2xl border glass-card-hover transition-all duration-500 ${
+                            isDone ? 'opacity-40 grayscale bg-zinc-100/50 dark:bg-zinc-900/20 border-transparent' : 'glass-card'
+                          }`}
                         >
-                          <div className="relative flex items-center mt-1">
-                            <input 
-                              type="checkbox" 
-                              checked={isDone}
-                              onChange={() => toggleTaskCompletion(task.id)}
-                              className="w-6 h-6 border-2 border-slate-300 rounded-lg text-teal-500 focus:ring-teal-500 focus:ring-offset-0 transition-all cursor-pointer accent-teal-500"
-                            />
-                          </div>
-                          
-                          <div className="flex-1 w-full">
-                            {/* LÓGICA DE EDIÇÃO AQUI */}
-                            {editingTaskId === task.id ? (
-                              <div className="flex flex-col sm:flex-row gap-2 w-full">
-                                <input 
-                                  type="text"
-                                  value={editingTaskText}
-                                  onChange={(e) => setEditingTaskText(e.target.value)}
-                                  className="flex-1 p-2 text-sm border-2 border-teal-500 rounded-lg focus:outline-none text-slate-700 bg-white"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveEdit(periodo, task.id);
-                                    if (e.key === 'Escape') setEditingTaskId(null);
-                                  }}
-                                />
-                                <button 
-                                  onClick={() => saveEdit(periodo, task.id)}
-                                  className="px-4 py-2 bg-teal-500 text-white text-sm rounded-lg font-bold hover:bg-teal-600 transition-colors"
-                                >
-                                  Salvar
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex justify-between items-start group">
-                                <p 
-                                  onClick={() => toggleTaskCompletion(task.id)}
-                                  className={`text-slate-800 font-medium transition-all duration-300 cursor-pointer ${isDone ? 'line-through text-slate-400' : ''}`}
-                                >
-                                  {task.tarefa}
-                                </p>
-                                <button 
-                                  onClick={() => startEditing(task.id, task.tarefa)}
-                                  className="text-slate-400 hover:text-teal-600 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1 text-sm ml-2"
-                                  title="Editar Tarefa"
-                                >
-                                  ✏️
-                                </button>
-                              </div>
-                            )}
-
-                            <div className="flex gap-3 mt-1.5 text-xs font-medium">
-                              <span className="text-slate-500 flex items-center gap-1">⏱ {task.duracao}</span>
-                              <span className={`px-2 py-0.5 rounded-md ${
-                                task.prioridade === 'Alta' ? 'bg-red-50 text-red-600' : 
-                                task.prioridade === 'Média' ? 'bg-amber-50 text-amber-600' : 
-                                'bg-slate-100 text-slate-600'
-                              }`}>
-                                Prioridade {task.prioridade}
-                              </span>
+                          <input
+                            type="checkbox"
+                            checked={isDone}
+                            onChange={() => toggleTaskCompletion(task.id)}
+                            className="w-5 h-5 mt-0.5 border-zinc-300 dark:border-zinc-700 rounded-full accent-zinc-900 dark:accent-white cursor-pointer"
+                          />
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                              <p className={`text-base font-medium transition-all ${isDone ? 'line-through text-zinc-500' : 'text-zinc-800 dark:text-zinc-100'}`}>
+                                {task.tarefa}
+                              </p>
+                              <button onClick={() => startEditing(task.id, task.tarefa)} className="text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity">Editar</button>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-zinc-200/50 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 border border-zinc-300/30 dark:border-zinc-700/30">{task.duracao}</span>
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
+                                task.prioridade === 'Alta' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-zinc-200/50 dark:bg-zinc-800/50 text-zinc-500 border-zinc-300/30'
+                              }`}>{task.prioridade}</span>
                             </div>
                           </div>
                         </div>
@@ -393,33 +316,13 @@ export default function DayFlow() {
                     })}
                   </div>
                 </div>
-              );
-            })}
+              )
+            ))}
 
-            {isAllCompleted && (
-              <div className="bg-teal-50 border border-teal-200 p-6 rounded-3xl text-center transform transition-all duration-500 scale-100 shadow-sm">
-                <h3 className="text-teal-800 font-bold text-xl mb-2">Dia Concluído! 🎉</h3>
-                <p className="text-teal-700 font-medium">{plan.mensagem || "Excelente trabalho hoje!"}</p>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 mt-8">
-              <button 
-                onClick={shareToWhatsApp}
-                className="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold hover:bg-[#20bd5a] transition-all shadow-lg flex justify-center items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                Partilhar no WhatsApp
-              </button>
-
-              <button 
-                onClick={resetApp}
-                className="w-full bg-transparent border-2 border-slate-200 text-slate-600 py-4 rounded-2xl font-bold hover:border-slate-900 hover:text-slate-900 transition-all"
-              >
-                Começar um novo dia
-              </button>
+            <div className="flex flex-col gap-3 mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-800/50">
+              <button onClick={shareToWhatsApp} className="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold hover:scale-[1.01] transition-all shadow-lg shadow-green-500/20">WhatsApp</button>
+              <button onClick={resetApp} className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 text-zinc-500 py-4 rounded-2xl font-bold hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all">Começar novo dia</button>
             </div>
-
           </div>
         )}
       </div>
