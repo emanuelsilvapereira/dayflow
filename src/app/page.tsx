@@ -14,6 +14,7 @@ export default function DayFlow() {
   const [generationsToday, setGenerationsToday] = useState(0);
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [user, setUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null); // NOVO: Guarda o perfil do usuário
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskText, setEditingTaskText] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -51,7 +52,20 @@ export default function DayFlow() {
 
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) setUser(session.user);
+      if (session) {
+        setUser(session.user);
+        
+        // NOVO: Busca o perfil do usuário na tabela 'perfis'
+        const { data: profileData } = await supabase
+          .from('perfis')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (profileData) {
+          setUserProfile(profileData);
+        }
+      }
     };
     checkUser();
   }, []);
@@ -67,6 +81,7 @@ export default function DayFlow() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setUserProfile(null);
     localStorage.removeItem('dayflow_current_plan');
     localStorage.removeItem('dayflow_progress');
     localStorage.removeItem('dayflow_count');
@@ -86,7 +101,12 @@ export default function DayFlow() {
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks: tasksInput, mood: mood }),
+        // NOVO: Agora enviamos o userProfile para a IA
+        body: JSON.stringify({ 
+          tasks: tasksInput, 
+          mood: mood,
+          perfil: userProfile 
+        }),
       });
 
       const data = await response.json();
@@ -218,7 +238,7 @@ export default function DayFlow() {
         <header className="mb-12 text-center animate-in fade-in slide-in-from-top-4 duration-1000">
           <h1 className="text-2xl md:text-3xl font-normal text-zinc-400 dark:text-zinc-500 tracking-tight leading-relaxed">
             Não precisas de fazer tudo. <br />
-            <span className="text-zinc-900 dark:text-zinc-200 font-medium">Apenas a próxima coisa certa.</span>
+            <span className="text-zinc-900 dark:text-zinc-200 font-medium">Apenas a próxima coisa certa{userProfile?.nome ? `, ${userProfile.nome}` : ''}.</span>
           </h1>
         </header>
 
@@ -274,6 +294,13 @@ export default function DayFlow() {
                 ></div>
               </div>
             </div>
+
+            {/* MENSAGEM DA IA */}
+            {plan.mensagem && (
+              <div className="text-center italic text-sm text-zinc-500 dark:text-zinc-400 mb-6">
+                "{plan.mensagem}"
+              </div>
+            )}
 
             {['manha', 'tarde', 'noite'].map((periodo) => (
               plan[periodo] && plan[periodo].length > 0 && (
