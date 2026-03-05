@@ -5,117 +5,145 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function Historico() {
+  const [user, setUser] = useState<any>(null);
   const [planos, setPlanos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Controle do Dark Mode
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    async function fetchPlanos() {
-      // 1. Verifica quem está logado
+    setMounted(true);
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    const fetchUserAndHistory = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (!session) {
-        window.location.href = '/login';
-        return;
-      }
+      if (session) {
+        setUser(session.user);
+        
+        // Busca os planos do usuário ordenados do mais recente para o mais antigo
+        const { data, error } = await supabase
+          .from('planos')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('criado_em', { ascending: false });
 
-      // 2. Busca os planos desse usuário específico lá no Supabase
-      const { data, error } = await supabase
-        .from('planos')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('criado_em', { ascending: false }); // Traz os mais recentes primeiro
-
-      if (error) {
-        console.error('Erro ao buscar planos:', error);
+        if (!error && data) {
+          setPlanos(data);
+        }
       } else {
-        setPlanos(data || []);
+        window.location.href = '/login';
       }
       setIsLoading(false);
-    }
+    };
 
-    fetchPlanos();
+    fetchUserAndHistory();
   }, []);
 
-  // Formata a data feia do banco de dados para o padrão brasileiro bonito
-  const formatarData = (dataString: string) => {
-    const data = new Date(dataString);
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(data);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
+  if (!mounted) return null;
+
   return (
-    <main className="min-h-screen bg-slate-50 p-6 md:p-12 font-sans text-slate-800">
-      <div className="max-w-2xl mx-auto">
-        
-        <header className="flex items-center justify-between mb-10">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">O seu Histórico</h1>
-            <p className="text-slate-500 text-sm mt-1">Todos os dias que você organizou.</p>
-          </div>
-          <Link 
-            href="/"
-            className="bg-white border-2 border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl hover:border-slate-900 hover:text-slate-900 transition-all text-sm font-bold shadow-sm"
-          >
-            Voltar
+    <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans p-6 md:p-12 transition-colors duration-500">
+      
+      {/* CABEÇALHO PREMIUM */}
+      <div className="max-w-2xl mx-auto mb-16">
+        <div className="flex justify-between items-center py-6 border-b border-zinc-200 dark:border-zinc-800/60">
+          
+          <Link href="/" className="flex items-center gap-2 group">
+            <div className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700 group-hover:bg-zinc-900 dark:group-hover:bg-white transition-colors"></div>
+            <span className="font-bold tracking-tighter text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors text-xl">
+              DayFlow
+            </span>
           </Link>
+
+          <div className="flex items-center gap-3 sm:gap-6">
+            {/* O BOTÃO DE DARK MODE AQUI */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm"
+              title="Alternar Tema"
+            >
+              {isDarkMode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+              )}
+            </button>
+
+            {user && (
+              <div className="flex items-center gap-4">
+                <Link href="/" className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                  Voltar ao Início
+                </Link>
+                <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
+                <button onClick={handleLogout} className="w-8 h-8 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-full flex items-center justify-center text-xs font-bold hover:scale-110 transition-transform">
+                  {user.email?.charAt(0).toUpperCase()}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto">
+        <header className="mb-12 animate-in fade-in slide-in-from-top-4 duration-1000">
+          <h1 className="text-3xl font-medium text-zinc-900 dark:text-white tracking-tight mb-2">Seu Histórico</h1>
+          <p className="text-zinc-500 dark:text-zinc-400">Relembre os dias em que você focou no que importava.</p>
         </header>
 
         {isLoading ? (
-          <div className="text-center py-20 flex flex-col items-center">
-             <svg className="animate-spin h-8 w-8 text-teal-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" strokeWidth="4" stroke="currentColor" strokeDasharray="32" strokeDashoffset="32" />
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-            </svg>
-            <p className="text-slate-500 font-medium">Puxando seus arquivos...</p>
-          </div>
+          <div className="text-center text-zinc-500 py-10 animate-pulse font-medium">Carregando seus planos...</div>
         ) : planos.length === 0 ? (
-          <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-            <span className="text-4xl mb-4 block">📭</span>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Nenhum plano salvo ainda</h3>
-            <p className="text-slate-500 mb-6">Comece a organizar os seus dias para ver o histórico aqui.</p>
-            <Link href="/" className="inline-block bg-teal-500 text-white font-bold px-6 py-3 rounded-xl hover:bg-teal-600 transition-colors shadow-md">
-              Criar o meu primeiro plano
+          <div className="glass-card p-10 rounded-[32px] text-center animate-in fade-in duration-1000">
+            <p className="text-zinc-500 dark:text-zinc-400 mb-6">Você ainda não tem planos salvos.</p>
+            <Link href="/" className="inline-block font-bold bg-zinc-900 dark:bg-white text-white dark:text-black px-8 py-4 rounded-2xl hover:opacity-90 transition-opacity">
+              Criar meu primeiro plano
             </Link>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-1000">
             {planos.map((plano) => (
-              <div key={plano.id} className="bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 transition-all hover:shadow-lg">
-                <div className="flex flex-wrap gap-4 justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                  <span className="font-bold text-slate-800 text-lg capitalize">{formatarData(plano.criado_em)}</span>
-                  <span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                    ⚡ Energia: {plano.energia === 'Normal' ? 'Normal' : plano.energia === 'Tired' ? 'Cansado' : plano.energia === 'Focused' ? 'Focado' : 'Sobrecarragado'}
+              <div key={plano.id} className="glass-card p-7 rounded-[24px] glass-card-hover transition-all duration-500">
+                <div className="flex justify-between items-center mb-5 pb-4 border-b border-zinc-200/50 dark:border-zinc-800/50">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-900 dark:text-white">
+                    {new Date(plano.criado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400">
+                    Energia: {plano.energia}
                   </span>
                 </div>
                 
-                <div className="space-y-5">
-                  {['manha', 'tarde', 'noite'].map((periodo) => {
-                    const tarefas = plano.dados_do_plano[periodo];
-                    if (!tarefas || tarefas.length === 0) return null;
-                    return (
+                <div className="space-y-4">
+                  {['manha', 'tarde', 'noite'].map(periodo => (
+                    plano.dados_do_plano[periodo] && plano.dados_do_plano[periodo].length > 0 && (
                       <div key={periodo}>
-                        <h4 className="text-sm font-bold text-slate-900 capitalize mb-3 flex items-center gap-2">
-                          {periodo === 'manha' ? '🌅 Manhã' : periodo === 'tarde' ? '☀️ Tarde' : '🌙 Noite'}
+                        <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400 mb-2">
+                          {periodo === 'manha' ? 'Manhã' : periodo === 'tarde' ? 'Tarde' : 'Noite'}
                         </h4>
-                        <ul className="space-y-2">
-                          {tarefas.map((t: any, idx: number) => (
-                            <li key={idx} className="text-sm text-slate-600 flex items-start gap-3 bg-slate-50 p-3 rounded-xl">
-                              <span className="text-teal-500 mt-0.5">▪</span> 
-                              <div>
-                                <span className="font-medium text-slate-700">{t.tarefa}</span>
-                                <span className="block text-xs text-slate-400 mt-1">Duração: {t.duracao}</span>
-                              </div>
+                        <ul className="space-y-1.5 pl-1">
+                          {plano.dados_do_plano[periodo].map((t: any, idx: number) => (
+                            <li key={idx} className="text-sm text-zinc-700 dark:text-zinc-300 flex items-start gap-2">
+                              <span className="text-zinc-300 dark:text-zinc-700 mt-0.5">•</span>
+                              {t.tarefa} <span className="text-[10px] text-zinc-400 ml-1">({t.duracao})</span>
                             </li>
                           ))}
                         </ul>
                       </div>
-                    );
-                  })}
+                    )
+                  ))}
                 </div>
               </div>
             ))}
