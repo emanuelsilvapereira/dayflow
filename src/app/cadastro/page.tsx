@@ -24,6 +24,15 @@ export default function Cadastro() {
     }
   }, [isDarkMode]);
 
+  // Se já estiver logado, manda direto para o dashboard
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) window.location.href = '/dashboard';
+    };
+    checkSession();
+  }, []);
+
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -44,7 +53,8 @@ export default function Cadastro() {
         if (profileError) throw profileError;
       }
 
-      window.location.href = '/';
+      // Redireciona para o dashboard após cadastro
+      window.location.href = '/dashboard';
       
     } catch (err: any) {
       setError(err.message || 'Ocorreu um erro ao criar a conta.');

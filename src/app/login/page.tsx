@@ -22,11 +22,11 @@ export default function Login() {
     }
   }, [isDarkMode]);
 
-  // Se já estiver logado, manda direto para a inicial
+  // Se já estiver logado, manda direto para o dashboard
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) window.location.href = '/';
+      if (session) window.location.href = '/dashboard';
     };
     checkSession();
   }, []);
@@ -42,14 +42,14 @@ export default function Login() {
       setError('E-mail ou palavra-passe incorretos.');
       setLoading(false);
     } else {
-      window.location.href = '/';
+      window.location.href = '/dashboard';
     }
   };
 
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/` },
+      options: { redirectTo: `${window.location.origin}/dashboard` },
     });
   };
 
